@@ -286,7 +286,6 @@ pub fn launch_cmds(
         if !win || !h.enable_hidraw {
             cmd.env("SDL_JOYSTICK_HIDAPI", "0");
         }
-        cmd.env("ENABLE_GAMESCOPE_WSI", "0");
         if h.sdl2_override != SDL2Override::No {
             let path_sdl = match h.sdl2_override {
                 SDL2Override::Srt => {

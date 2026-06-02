@@ -1,0 +1,13 @@
+diff --git a/src/Backends/SDLBackend.cpp b/src/Backends/SDLBackend.cpp
+index ddd2363..251d790 100644
+--- a/src/Backends/SDLBackend.cpp
++++ b/src/Backends/SDLBackend.cpp
+@@ -546,6 +546,8 @@ namespace gamescope
+ 	}
+ 	void CSDLBackend::SetRelativeMouseMode( bool bRelative )
+ 	{
++		if ( m_bApplicationGrabbed == bRelative )
++			return;
+ 		m_bApplicationGrabbed = bRelative;
+ 		PushUserEvent( GAMESCOPE_SDL_EVENT_GRAB );
+ 	}

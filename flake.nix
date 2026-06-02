@@ -21,7 +21,7 @@
         # PartyDeck's gamescope fork with keyboard/mouse device-filtering support.
         # Overrides upstream gamescope; intentionally not put on PATH globally —
         # partydeck wraps itself so that only gamescope-kbm is visible at runtime.
-        gamescope-kbm = pkgs.gamescope.overrideAttrs (
+        gamescope-kbm = (pkgs.gamescope.override { enableWsi = true; }).overrideAttrs (
           _finalAttrs: previousAttrs: {
             pname = "gamescope-kbm";
             version = "0-unstable-2026-03-11";
@@ -36,6 +36,7 @@
 
             patches = (previousAttrs.patches or [ ]) ++ [
               ./patches/gamescope-kbm-no-inhibit-shortcuts.patch
+              ./patches/gamescope-kbm-fix-locked-pointer-frame-flood.patch
             ];
 
             mesonFlags = previousAttrs.mesonFlags ++ [
@@ -164,7 +165,8 @@
           postFixup = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
             wrapProgram $out/bin/partydeck \
               --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath finalAttrs.buildInputs}:/run/opengl-driver/lib" \
-              --prefix PATH : "${pkgs.lib.makeBinPath finalAttrs.runtimeDeps}"
+              --prefix PATH : "${pkgs.lib.makeBinPath finalAttrs.runtimeDeps}" \
+              --prefix VK_ADD_IMPLICIT_LAYER_PATH : "${gamescope-kbm}/share/vulkan/implicit_layer.d"
           '';
 
           meta = {
