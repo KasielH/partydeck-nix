@@ -34,6 +34,10 @@
               hash = "sha256-IHxM1j2HMf5hC2GjTq4fI3qs3ev/AFwP2CPcyF6203o=";
             };
 
+            patches = (previousAttrs.patches or [ ]) ++ [
+              ./patches/gamescope-kbm-no-inhibit-shortcuts.patch
+            ];
+
             mesonFlags = previousAttrs.mesonFlags ++ [
               (pkgs.lib.mesonOption "benchmark" "disabled")
               # libei / XTEST is not needed for PartyDeck's use-case

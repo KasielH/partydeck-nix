@@ -372,6 +372,7 @@ pub fn launch_cmds(
             if !kbms.is_empty() {
                 cmd.arg(format!("--libinput-hold-dev={}", kbms));
                 cmd.arg("--grab");
+                cmd.arg("--no-inhibit-shortcuts");
             }
         }
         cmd.arg("--");
