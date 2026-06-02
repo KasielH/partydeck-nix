@@ -296,15 +296,16 @@ pub fn launch_cmds(
         }
 
         if h.use_goldberg {
-            cmd.env("GseAppPath", PATH_PARTY.join("goldberg_data"));
-            cmd.env("GseSavePath", path_prof.join("steam"));
-            cmd.env("SteamAppUser", instance.profname.clone());
-            cmd.env("SteamUser", instance.profname.clone());
-            cmd.env("SteamClientLaunch", "1");
-            cmd.env("SteamEnv", "1");
+            cmd.args(["--setenv", "GseAppPath", &PATH_PARTY.join("goldberg_data").to_string_lossy()]);
+            cmd.args(["--setenv", "GseSavePath", &path_prof.join("steam").to_string_lossy()]);
+            cmd.args(["--setenv", "SteamAppUser", &instance.profname]);
+            cmd.args(["--setenv", "SteamUser", &instance.profname]);
+            cmd.args(["--setenv", "SteamClientLaunch", "1"]);
+            cmd.args(["--setenv", "SteamEnv", "1"]);
             if let Some(appid) = h.steam_appid {
-                cmd.env("SteamAppId", &appid.to_string());
-                cmd.env("SteamGameId", &appid.to_string());
+                cmd.args(["--setenv", "SteamAppId", &appid.to_string()]);
+                cmd.args(["--setenv", "SteamGameId", &appid.to_string()]);
+                cmd.args(["--setenv", "GAMEID", &appid.to_string()]);
             }
 
             let sdk32_link = std::fs::read_link(PATH_STEAM.join("sdk32")).map_err(|e| format!("Failed to read sdk32 link: {}", e))?;
