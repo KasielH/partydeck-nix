@@ -39,61 +39,87 @@ A split-screen game launcher for Linux/SteamOS
 - Profile support allows each player to have their own persistent save data, settings, and stats for games
 - Works out of the box on SteamOS
 
-## Installing & Usage
+## Installing & Usage (NixOS)
 
-Download the latest release [here](https://github.com/wunnr/partydeck-rs/releases) and extract it into a folder. Download game handlers [here](https://drive.proton.me/urls/D9HBKM18YR#zG8XC8yVy9WL).
+This fork is packaged as a Nix flake. All dependencies — including the `gamescope-kbm` fork with keyboard/mouse device filtering — are built and bundled automatically.
+
+Download game handlers [here](https://drive.proton.me/urls/D9HBKM18YR#zG8XC8yVy9WL).
+
+### Requirements
+
+- NixOS with flakes enabled. If you haven't enabled flakes yet, add this to your `configuration.nix`:
+
+```nix
+nix.settings.experimental-features = [ "nix-command" "flakes" ];
+```
+
+- GPU drivers configured:
+
+```nix
+hardware.graphics.enable = true;
+```
+
+### Try it without installing
+
+```bash
+nix run github:KasielH/partydeck-nix
+```
+
+### Install to your user profile
+
+```bash
+nix profile install github:KasielH/partydeck-nix
+```
+
+After installing, `partydeck` will be on your PATH and will appear in your app launcher.
+
+### Add to your NixOS system flake
+
+In your `flake.nix`:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    partydeck.url = "github:KasielH/partydeck-nix";
+  };
+
+  outputs = { nixpkgs, partydeck, ... }: {
+    nixosConfigurations.your-hostname = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ({ pkgs, ... }: {
+          environment.systemPackages = [
+            partydeck.packages.x86_64-linux.default
+          ];
+        })
+      ];
+    };
+  };
+}
+```
 
 ### SteamOS
 
-SteamOS includes all of PartyDeck's dependencies, but you will need to be on SteamOS 3.7.0 or above for the splitscreen script to work.
-
-If you're in desktop mode, simply run the `partydeck` executable. To use PartyDeck in Gaming Mode, add `GamingModeLauncher.sh` as a shortcut to Steam, and in the settings for that shortcut disable Steam Input.
-
-### Desktop Linux
-
-PartyDeck's splitscreen tiling script requires KDE Plasma 6.0 and up; if you're on an older version of Plasma or not running Plasma at all, you can run PartyDeck without the script, but then it's up to you to resize and reposition the game windows yourself. You'll also need to install, Gamescope, Bubblewrap, and Fuse-overlayfs using your distro's package manager. Then, simply run the `partydeck` executable to get started. 
+For SteamOS, refer to the [upstream installation instructions](https://github.com/partydeck/partydeck).
 
 ### Getting Started
+
 Once in the main menu, click the + button to add a game, or click the button with the down arrow icon to import a PartyDeck Handler package (.pd2). Create profiles if you want to store save data, and have a look through the settings menu.
 
-## Building
+## Building from source
 
-You'll need a Rust toolchain with the 2024 Edition. For building the mouse/keyboard gamescope fork, you'll also need `meson` and `ninja` installed.
-
-Clone the repo and initialise submodules:
-
-```
-git clone https://github.com/partydeck/partydeck.git
-cd partydeck
-git submodule update --init --recursive --depth 1
+```bash
+git clone https://github.com/KasielH/partydeck-nix.git
+cd partydeck-nix
+nix build .#partydeck
+./result/bin/partydeck
 ```
 
-Then build with:
+To build just the gamescope-kbm fork:
 
-```
-cargo build --release
-```
-
-If built with download deps, the build script downloads the latest releases of Goldberg Steam Emu and UMU Launcher from GitHub. The output binary and bundled dependencies are placed in `target/release/`.
-
-### Build feature flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `download_deps` | off | Downloads Goldberg Steam Emu and UMU Launcher from GitHub releases with known good versions|
-| `download_deps_latest` | off | Downloads Goldberg Steam Emu and UMU Launcher from GitHub releases with latest available |
-| `build_gamescope` | off | Builds the mouse/keyboard gamescope fork from the submodule (requires `meson` and `ninja`) |
-
-**Build with gamescope:**
-
-```
-cargo build --release -F build_gamescope
-```
-
-**Download known dependancies:**
-
-```
-cargo build --release -F download_deps
+```bash
+nix build .#gamescope-kbm
 ```
 
 
