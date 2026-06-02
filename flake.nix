@@ -73,9 +73,17 @@
             version = "release-2026_03_10";
           in
           pkgs.fetchzip {
-            url = "https://github.com/Detanup01/gbe_fork/releases/download/${version}/emu-linux-release.tar.gz";
+            url = "https://github.com/Detanup01/gbe_fork/releases/download/${version}/emu-linux-release.tar.bz2";
             # Run `nix-prefetch-url --unpack <url>` and paste the hash here:
             hash = "sha256-tBqjc1FRxQ2foZvg24WdcS5gDWgF8m6ReJeluqxfWrk=";
+          };
+        goldberg-win =
+          let
+            version = "release-2026_03_10";
+          in
+          pkgs.fetchurl {
+            url = "https://github.com/Detanup01/gbe_fork/releases/download/${version}/emu-win-release.7z";
+            hash = "sha256-D2ekISqk5qcfhIeaOgD2dcsqjEPhPjjgsnq1yeal5l8=";
           };
 
         # ── partydeck ──────────────────────────────────────────────────────────
@@ -83,12 +91,7 @@
           pname = "partydeck";
           version = "0.8.6";
 
-          src = pkgs.fetchFromGitHub {
-            owner = "partydeck";
-            repo = "partydeck";
-            tag = "v${finalAttrs.version}";
-            hash = "sha256-BLgaQxmnLaKWo/RFOCpdjwfoYnyHXxoJy1ImJU/8ceI=";
-          };
+          src = ./.;
 
           cargoHash = "sha256-pPbMKyp3e3umhVwZ7Aj3T9RUPPTdZlGYgWUjUdy2YB8=";
 
@@ -97,6 +100,7 @@
           nativeBuildInputs = [
             pkgs.makeBinaryWrapper
             pkgs.pkg-config
+            pkgs.p7zip
           ];
 
           buildInputs = [
@@ -149,6 +153,11 @@
             install -dm755 $out/share/partydeck/goldberg
             cp -r ${goldberg}/regular/x64 $out/share/partydeck/goldberg/linux64
             cp -r ${goldberg}/regular/x32 $out/share/partydeck/goldberg/linux32
+
+            7z x ${goldberg-win} -o$TMPDIR/goldberg-win
+            install -dm755 $out/share/partydeck/goldberg/win
+            cp $TMPDIR/goldberg-win/release/regular/x32/steam_api.dll $out/share/partydeck/goldberg/win/
+            cp $TMPDIR/goldberg-win/release/regular/x64/steam_api64.dll $out/share/partydeck/goldberg/win/
           '';
 
           postFixup = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''

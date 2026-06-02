@@ -239,6 +239,7 @@ pub fn launch_cmds(
         cmd.arg("--die-with-parent");
         cmd.args(["--dev-bind", "/", "/"]);
         cmd.args(["--tmpfs", "/tmp"]);
+        cmd.args(["--bind", "/tmp/.X11-unix", "/tmp/.X11-unix"]);
         // Mask out any gamepads that aren't this player's
         for (d, dev) in input_devices.iter().enumerate() {
             if !dev.enabled
