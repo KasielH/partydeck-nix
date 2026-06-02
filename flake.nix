@@ -35,7 +35,6 @@
             };
 
             patches = (previousAttrs.patches or [ ]) ++ [
-              ./patches/gamescope-kbm-no-inhibit-shortcuts.patch
               ./patches/gamescope-kbm-fix-locked-pointer-frame-flood.patch
             ];
 
@@ -144,6 +143,16 @@
             install -Dm644 res/*.js  -t $out/share/partydeck
             install -Dm644 res/*.png -t $out/share/partydeck
             install -Dm755 res/GamingModeLauncher.sh -t $out/share/partydeck
+            install -Dm644 res/icon.png $out/share/icons/hicolor/256x256/apps/partydeck.png
+            install -Dm644 /dev/stdin $out/share/applications/partydeck.desktop <<EOF
+[Desktop Entry]
+Name=PartyDeck
+Comment=Split-screen game launcher
+Exec=partydeck
+Icon=partydeck
+Type=Application
+Categories=Game;
+EOF
 
             # ── Goldberg Steam Emu ────────────────────────────────────────────
             # The pre-built Goldberg release tarball ships a x64/ and x32/
