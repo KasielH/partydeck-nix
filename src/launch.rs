@@ -471,8 +471,53 @@ pub fn launch_cmds(
             ]);
 
             if win {
+                // Build a writable staging dir that merges goldberg DLLs with a
+                // SteamApps/libraryfolders.vdf so SteamLocate (used by modengine2 etc.)
+                // can open the file rather than crashing on a missing path.
+                let goldberg_steam_staging = PATH_PARTY.join("goldberg_data/steam_fake_win");
+
+                if i == 0 {
+                    if goldberg_steam_staging.exists() {
+                        std::fs::remove_dir_all(&goldberg_steam_staging).ok();
+                    }
+                    std::fs::create_dir_all(goldberg_steam_staging.join("SteamApps"))?;
+
+                    // Symlink each DLL from the nix-store goldberg/win into the staging dir.
+                    // Symlinks resolve correctly inside bwrap because / is dev-bound.
+                    if let Ok(entries) = std::fs::read_dir(PATH_RES.join("goldberg/win")) {
+                        for entry in entries.flatten() {
+                            if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                                let link = goldberg_steam_staging.join(entry.file_name());
+                                std::os::unix::fs::symlink(entry.path(), &link).ok();
+                            }
+                        }
+                    }
+
+                    let vdf_content = if let Some(appid) = h.steam_appid {
+                        // Find the Steam library root (parent that contains steamapps/).
+                        let lib_linux = gamedir
+                            .ancestors()
+                            .find(|p| p.join("steamapps").is_dir())
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_else(|| gamedir.to_string_lossy().to_string());
+                        // Z: drive maps / in Wine; backslashes doubled for VDF escaping.
+                        let vdf_path = format!("Z:{}", lib_linux.replace('/', "\\"))
+                            .replace('\\', "\\\\");
+                        format!(
+                            "\"libraryfolders\"\n{{\n\t\"0\"\n\t{{\n\t\t\"path\"\t\t\"{}\"\n\t\t\"apps\"\n\t\t{{\n\t\t\t\"{}\" \"0\"\n\t\t}}\n\t}}\n}}",
+                            vdf_path, appid
+                        )
+                    } else {
+                        "\"libraryfolders\"\n{\n}".to_string()
+                    };
+                    std::fs::write(
+                        goldberg_steam_staging.join("SteamApps/libraryfolders.vdf"),
+                        &vdf_content,
+                    )?;
+                }
+
                 cmd.arg("--bind").args([
-                    PATH_RES.join("goldberg/win"),
+                    goldberg_steam_staging,
                     path_pfx.join("drive_c/Program Files (x86)/Steam"),
                 ]);
             }
