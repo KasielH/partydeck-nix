@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -8,6 +9,78 @@ use crate::instance::*;
 use crate::paths::*;
 use crate::profiles::{create_profile, create_profile_gamesave};
 use crate::util::*;
+
+// Interface name prefixes that gbe_fork (goldberg) recognises for steam_interfaces.txt.
+// Each prefix must be followed by one or more ASCII digits in the binary for a hit to count.
+const INTERFACE_PREFIXES: &[&str] = &[
+    "STEAMAPPS_INTERFACE_VERSION",
+    "STEAMAPPLIST_INTERFACE_VERSION",
+    "STEAMAPPTICKET_INTERFACE_VERSION",
+    "SteamClient",
+    "STEAMCONTROLLER_INTERFACE_VERSION",
+    "SteamController",
+    "SteamFriends",
+    "SteamGameServerStats",
+    "SteamGameCoordinator",
+    "SteamGameServer",
+    "STEAMHTMLSURFACE_INTERFACE_VERSION_",
+    "STEAMHTTP_INTERFACE_VERSION",
+    "SteamInput",
+    "STEAMINVENTORY_INTERFACE_V",
+    "SteamMatchMakingServers",
+    "SteamMatchMaking",
+    "SteamMatchGameSearch",
+    "SteamParties",
+    "STEAMMUSIC_INTERFACE_VERSION",
+    "STEAMMUSICREMOTE_INTERFACE_VERSION",
+    "SteamNetworkingMessages",
+    "SteamNetworkingSockets",
+    "SteamNetworkingUtils",
+    "SteamNetworking",
+    "STEAMPARENTALSETTINGS_INTERFACE_VERSION",
+    "STEAMREMOTEPLAY_INTERFACE_VERSION",
+    "STEAMREMOTESTORAGE_INTERFACE_VERSION",
+    "STEAMSCREENSHOTS_INTERFACE_VERSION",
+    "STEAMTIMELINE_INTERFACE_V",
+    "STEAMUGC_INTERFACE_VERSION",
+    "SteamUser",
+    "STEAMUSERSTATS_INTERFACE_VERSION",
+    "SteamUtils",
+    "STEAMVIDEO_INTERFACE_V",
+    "STEAMUNIFIEDMESSAGES_INTERFACE_VERSION",
+    "SteamMasterServerUpdater",
+];
+
+fn scan_steam_interfaces(api_path: &Path) -> Vec<String> {
+    let Ok(data) = std::fs::read(api_path) else {
+        return Vec::new();
+    };
+    let mut found = BTreeSet::new();
+    for prefix in INTERFACE_PREFIXES {
+        let prefix_bytes = prefix.as_bytes();
+        let prefix_len = prefix_bytes.len();
+        let mut idx = 0;
+        while idx + prefix_len < data.len() {
+            if data[idx..].starts_with(prefix_bytes) {
+                let digits_start = idx + prefix_len;
+                let digits_end = digits_start
+                    + data[digits_start..]
+                        .iter()
+                        .take_while(|b| b.is_ascii_digit())
+                        .count();
+                if digits_end > digits_start {
+                    if let Ok(s) = std::str::from_utf8(&data[idx..digits_end]) {
+                        found.insert(s.to_string());
+                    }
+                }
+                idx = digits_start;
+            } else {
+                idx += 1;
+            }
+        }
+    }
+    found.into_iter().collect()
+}
 
 pub fn setup_profiles(
     h: &Handler,
@@ -27,16 +100,52 @@ pub fn setup_profiles(
         );
     }
 
-    // fuse-overlayfs has private mount propagation; bwrap can't see it, so write directly
-    // to the game installation dir which is always visible via --dev-bind / /.
     if h.use_goldberg {
-        if let Some(appid) = h.steam_appid {
-            if let Ok(game_root) = h.get_game_rootpath() {
-                let exec_path = Path::new(&h.exec);
-                let exec_dir = exec_path.parent().unwrap_or(Path::new("."));
-                let appid_path = PathBuf::from(&game_root).join(exec_dir).join("steam_appid.txt");
+        let settings_dir = PATH_PARTY.join("goldberg_data/steam_settings");
+        std::fs::create_dir_all(&settings_dir)?;
+
+        // Ensure loopback is in custom_broadcasts so both instances discover each other
+        // on the same machine (gbe_fork uses UDP broadcast for peer discovery).
+        let broadcasts_path = settings_dir.join("custom_broadcasts.txt");
+        if !broadcasts_path.exists() {
+            std::fs::write(&broadcasts_path, "127.0.0.1\n")?;
+        }
+
+        if let Ok(game_root) = h.get_game_rootpath() {
+            let exec_path = Path::new(&h.exec);
+            let exec_dir = exec_path.parent().unwrap_or(Path::new("."));
+            let game_exec_dir = PathBuf::from(&game_root).join(exec_dir);
+
+            // fuse-overlayfs has private mount propagation; bwrap can't see it, so write
+            // steam_appid.txt directly to the game installation dir which is always
+            // visible via --dev-bind / /.
+            if let Some(appid) = h.steam_appid {
+                let appid_path = game_exec_dir.join("steam_appid.txt");
                 std::fs::write(&appid_path, appid.to_string())?;
                 println!("[partydeck] Wrote steam_appid.txt to {}", appid_path.display());
+            }
+
+            // Generate steam_interfaces.txt by scanning the game's Steam API DLL.
+            // gbe_fork always requires this file for correct interface version routing.
+            let api_candidates = [
+                game_exec_dir.join("steam_api64.dll"),
+                game_exec_dir.join("steam_api.dll"),
+                game_exec_dir.join("libsteam_api.so"),
+            ];
+            for api_path in &api_candidates {
+                if api_path.exists() {
+                    let interfaces = scan_steam_interfaces(api_path);
+                    if !interfaces.is_empty() {
+                        let iface_path = settings_dir.join("steam_interfaces.txt");
+                        std::fs::write(&iface_path, interfaces.join("\n") + "\n")?;
+                        println!(
+                            "[partydeck] Generated steam_interfaces.txt ({} interfaces) from {}",
+                            interfaces.len(),
+                            api_path.display()
+                        );
+                    }
+                    break;
+                }
             }
         }
     }
@@ -345,7 +454,7 @@ pub fn launch_cmds(
             if let Some(appid) = h.steam_appid {
                 cmd.args(["--setenv", "SteamAppId", &appid.to_string()]);
                 cmd.args(["--setenv", "SteamGameId", &appid.to_string()]);
-                cmd.args(["--setenv", "GAMEID", &appid.to_string()]);
+                cmd.args(["--setenv", "GAMEID", &format!("umu-{}", appid)]);
             }
 
             let sdk32_link = std::fs::read_link(PATH_STEAM.join("sdk32")).map_err(|e| format!("Failed to read sdk32 link: {}", e))?;
