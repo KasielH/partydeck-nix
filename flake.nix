@@ -93,7 +93,7 @@
 
           src = ./.;
 
-          cargoHash = "sha256-pPbMKyp3e3umhVwZ7Aj3T9RUPPTdZlGYgWUjUdy2YB8=";
+          cargoHash = "sha256-L2FHN+H18qA01lFPLdsZnZGyYUW6y7Qa2VOtjbStO5A=";
 
           strictDeps = true;
 
@@ -124,13 +124,6 @@
             pkgs.xdg-utils
           ];
 
-          # Upstream v0.8.6 has a stale version string in Cargo.toml ("0.8.5")
-          # while Cargo.lock correctly reflects 0.8.6.  Patch only Cargo.toml so
-          # cargo vendor validation still matches the lock file.
-          prePatch = ''
-            substituteInPlace Cargo.toml \
-              --replace-fail 'version = "0.8.5"' 'version = "${finalAttrs.version}"'
-          '';
 
           # Redirect the hard-coded /usr/share/partydeck path so the binary finds
           # its bundled assets (JS glue, Goldberg, GamingModeLauncher, etc.) in
@@ -158,6 +151,10 @@
             install -dm755 $out/share/partydeck/goldberg/win
             cp $TMPDIR/goldberg-win/release/regular/x32/steam_api.dll $out/share/partydeck/goldberg/win/
             cp $TMPDIR/goldberg-win/release/regular/x64/steam_api64.dll $out/share/partydeck/goldberg/win/
+            cp $TMPDIR/goldberg-win/release/steamclient_experimental/steamclient.dll $out/share/partydeck/goldberg/win/
+            cp $TMPDIR/goldberg-win/release/steamclient_experimental/steamclient64.dll $out/share/partydeck/goldberg/win/
+            cp $TMPDIR/goldberg-win/release/steamclient_experimental/GameOverlayRenderer.dll $out/share/partydeck/goldberg/win/
+            cp $TMPDIR/goldberg-win/release/steamclient_experimental/GameOverlayRenderer64.dll $out/share/partydeck/goldberg/win/
           '';
 
           postFixup = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''

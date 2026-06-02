@@ -27,7 +27,42 @@ pub fn setup_profiles(
         );
     }
 
+    // fuse-overlayfs has private mount propagation; bwrap can't see it, so write directly
+    // to the game installation dir which is always visible via --dev-bind / /.
+    if h.use_goldberg {
+        if let Some(appid) = h.steam_appid {
+            if let Ok(game_root) = h.get_game_rootpath() {
+                let exec_path = Path::new(&h.exec);
+                let exec_dir = exec_path.parent().unwrap_or(Path::new("."));
+                let appid_path = PathBuf::from(&game_root).join(exec_dir).join("steam_appid.txt");
+                std::fs::write(&appid_path, appid.to_string())?;
+                println!("[partydeck] Wrote steam_appid.txt to {}", appid_path.display());
+            }
+        }
+    }
+
     Ok(())
+}
+
+fn x11_sockets() -> std::collections::HashSet<std::ffi::OsString> {
+    std::fs::read_dir("/tmp/.X11-unix")
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.file_name())
+        .collect()
+}
+
+fn wait_for_new_x_socket(before: &std::collections::HashSet<std::ffi::OsString>, timeout_secs: u64) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+    while std::time::Instant::now() < deadline {
+        if x11_sockets().difference(before).next().is_some() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    eprintln!("[partydeck] Warning: timed out waiting for gamescope Xwayland socket");
 }
 
 pub fn launch_game(
@@ -48,24 +83,22 @@ pub fn launch_game(
         kwin_dbus_start_script(PATH_RES.join(script)).map_err(|e| format!("Failed to start KWin script: {}", e))?;
     }
 
-    let sleep_time = match h.pause_between_starts {
-        Some(f) => f,
-        None => 0.5,
-    };
-
     let mut handles = Vec::new();
 
-    let mut i = 0;
-    for mut cmd in new_cmds {
+    for (i, mut cmd) in new_cmds.into_iter().enumerate() {
+        let x11_before = x11_sockets();
+
         let handle = cmd.spawn().map_err(|e| {
             format!("Failed to start '{}': {}", cmd.get_program().to_string_lossy(), e)
         })?;
         handles.push(handle);
 
         if i < instances.len() - 1 {
-            std::thread::sleep(std::time::Duration::from_secs_f64(sleep_time));
+            wait_for_new_x_socket(&x11_before, 15);
+            if let Some(extra) = h.pause_between_starts {
+                std::thread::sleep(std::time::Duration::from_secs_f64(extra));
+            }
         }
-        i += 1;
     }
 
     for mut handle in handles {
@@ -162,7 +195,7 @@ pub fn launch_cmds(
             };
 
             cmd.env("WINEPREFIX", &path_pfx);
-            cmd.env("PROTON_VERB", "run");
+            cmd.env("PROTON_VERB", "waitforexitandrun");
             cmd.env("PROTONPATH", protonpath);
             if h.enable_hidraw {
                 cmd.env("PROTON_ENABLE_HIDRAW", "1");
@@ -293,7 +326,13 @@ pub fn launch_cmds(
         if is_appimage {
             // Because we are faking temp directory, this makes the system use the real vulkan directory for games
             // Used here because the env var is set durring bwrap and gamescope process starting so env cant be cleared at this stage.
-            cmd.args(["--unsetenv","VK_DRIVER_FILES"]); 
+            cmd.args(["--unsetenv","VK_DRIVER_FILES"]);
+        }
+
+        if win {
+            // umu-run falls back to exe.parent (the Game/ subdir) when this is unset,
+            // causing protonfixes to double-append 'Game' and fail to find game files.
+            cmd.args(["--setenv", "STEAM_COMPAT_INSTALL_PATH", &gamedir.to_string_lossy()]);
         }
 
         if h.use_goldberg {
